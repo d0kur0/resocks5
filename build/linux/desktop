@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=My Product
+Comment=A resocks5 application
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/resocks5.exe %u
+Terminal=false
+Type=Application
+Icon=resocks5.exe
+Categories=Utility;
+StartupWMClass=resocks5.exe
+
+ 
