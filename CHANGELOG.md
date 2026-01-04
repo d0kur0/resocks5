@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/d0kur0/resocks5/compare/v1.0.0...v1.0.1) (2026-01-04)
+
+
+### Bug Fixes
+
+* optimize proxy buffer sizes and connection handling ([337b9b6](https://github.com/d0kur0/resocks5/commit/337b9b6ee7979a9ee279415573b7e3fdd60b93c6))
+
 # 1.0.0 (2026-01-03)
 
 
