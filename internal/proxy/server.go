@@ -13,7 +13,7 @@ import (
 
 var bufferPool = sync.Pool{
 	New: func() interface{} {
-		return make([]byte, 4*1024*1024)
+		return make([]byte, 64*1024)
 	},
 }
 
@@ -191,17 +191,15 @@ func (s *Server) handleSOCKS5(clientConn net.Conn) error {
 		tcpConn.SetKeepAlive(true)
 		tcpConn.SetKeepAlivePeriod(30 * time.Second)
 		tcpConn.SetNoDelay(true)
-		tcpConn.SetReadBuffer(8 * 1024 * 1024)
-		tcpConn.SetWriteBuffer(8 * 1024 * 1024)
-		tcpConn.SetLinger(0)
+		tcpConn.SetReadBuffer(256 * 1024)
+		tcpConn.SetWriteBuffer(256 * 1024)
 	}
 	if tcpConn, ok := clientConn.(*net.TCPConn); ok {
 		tcpConn.SetKeepAlive(true)
 		tcpConn.SetKeepAlivePeriod(30 * time.Second)
 		tcpConn.SetNoDelay(true)
-		tcpConn.SetReadBuffer(8 * 1024 * 1024)
-		tcpConn.SetWriteBuffer(8 * 1024 * 1024)
-		tcpConn.SetLinger(0)
+		tcpConn.SetReadBuffer(256 * 1024)
+		tcpConn.SetWriteBuffer(256 * 1024)
 	}
 
 	errCh := make(chan error, 2)
@@ -246,9 +244,8 @@ func (s *Server) connectToRemote(targetAddr string) (net.Conn, error) {
 		tcpConn.SetKeepAlive(true)
 		tcpConn.SetKeepAlivePeriod(30 * time.Second)
 		tcpConn.SetNoDelay(true)
-		tcpConn.SetReadBuffer(8 * 1024 * 1024)
-		tcpConn.SetWriteBuffer(8 * 1024 * 1024)
-		tcpConn.SetLinger(0)
+		tcpConn.SetReadBuffer(256 * 1024)
+		tcpConn.SetWriteBuffer(256 * 1024)
 	}
 
 	conn.SetDeadline(time.Now().Add(30 * time.Second))
@@ -389,33 +386,9 @@ func (s *Server) copyBuffer(dst net.Conn, src net.Conn) error {
 	buf := bufferPool.Get().([]byte)
 	defer bufferPool.Put(buf)
 
-	if tcpDst, ok := dst.(*net.TCPConn); ok {
-		if tcpSrc, ok := src.(*net.TCPConn); ok {
-			return s.fastCopy(tcpDst, tcpSrc, buf)
-		}
-	}
-
 	_, err := io.CopyBuffer(dst, src, buf)
-	return err
-}
-
-func (s *Server) fastCopy(dst *net.TCPConn, src *net.TCPConn, buf []byte) error {
-	for {
-		nr, er := src.Read(buf)
-		if nr > 0 {
-			nw, ew := dst.Write(buf[:nr])
-			if ew != nil {
-				return ew
-			}
-			if nw != nr {
-				return io.ErrShortWrite
-			}
-		}
-		if er != nil {
-			if er == io.EOF {
-				return nil
-			}
-			return er
-		}
+	if err == io.EOF {
+		return nil
 	}
+	return err
 }
