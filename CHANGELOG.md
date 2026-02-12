@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/d0kur0/resocks5/compare/v1.0.1...v1.0.2) (2026-02-12)
+
+
+### Bug Fixes
+
+* optimize buffer usage ([b21dc72](https://github.com/d0kur0/resocks5/commit/b21dc7217bc069863dc2118e7e0ca9451ff768f4))
+
 ## [1.0.1](https://github.com/d0kur0/resocks5/compare/v1.0.0...v1.0.1) (2026-01-04)
 
 
