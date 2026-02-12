@@ -11,9 +11,14 @@ import (
 	"time"
 )
 
+type writerOnly struct {
+	io.Writer
+}
+
 var bufferPool = sync.Pool{
 	New: func() interface{} {
-		return make([]byte, 64*1024)
+		buf := make([]byte, 256*1024)
+		return &buf
 	},
 }
 
@@ -191,21 +196,17 @@ func (s *Server) handleSOCKS5(clientConn net.Conn) error {
 		tcpConn.SetKeepAlive(true)
 		tcpConn.SetKeepAlivePeriod(30 * time.Second)
 		tcpConn.SetNoDelay(true)
-		tcpConn.SetReadBuffer(256 * 1024)
-		tcpConn.SetWriteBuffer(256 * 1024)
 	}
 	if tcpConn, ok := clientConn.(*net.TCPConn); ok {
 		tcpConn.SetKeepAlive(true)
 		tcpConn.SetKeepAlivePeriod(30 * time.Second)
 		tcpConn.SetNoDelay(true)
-		tcpConn.SetReadBuffer(256 * 1024)
-		tcpConn.SetWriteBuffer(256 * 1024)
 	}
 
 	errCh := make(chan error, 2)
 
 	go func() {
-		err := s.copyBuffer(remoteConn, clientConn)
+		err := s.relay(remoteConn, clientConn)
 		if err != nil {
 			remoteConn.Close()
 		}
@@ -213,7 +214,7 @@ func (s *Server) handleSOCKS5(clientConn net.Conn) error {
 	}()
 
 	go func() {
-		err := s.copyBuffer(clientConn, remoteConn)
+		err := s.relay(clientConn, remoteConn)
 		if err != nil {
 			clientConn.Close()
 		}
@@ -244,8 +245,6 @@ func (s *Server) connectToRemote(targetAddr string) (net.Conn, error) {
 		tcpConn.SetKeepAlive(true)
 		tcpConn.SetKeepAlivePeriod(30 * time.Second)
 		tcpConn.SetNoDelay(true)
-		tcpConn.SetReadBuffer(256 * 1024)
-		tcpConn.SetWriteBuffer(256 * 1024)
 	}
 
 	conn.SetDeadline(time.Now().Add(30 * time.Second))
@@ -382,11 +381,11 @@ func (s *Server) connectThroughRemote(conn net.Conn, targetAddr string) error {
 	return nil
 }
 
-func (s *Server) copyBuffer(dst net.Conn, src net.Conn) error {
-	buf := bufferPool.Get().([]byte)
-	defer bufferPool.Put(buf)
+func (s *Server) relay(dst net.Conn, src net.Conn) error {
+	bufp := bufferPool.Get().(*[]byte)
+	defer bufferPool.Put(bufp)
 
-	_, err := io.CopyBuffer(dst, src, buf)
+	_, err := io.CopyBuffer(writerOnly{dst}, src, *bufp)
 	if err == io.EOF {
 		return nil
 	}
