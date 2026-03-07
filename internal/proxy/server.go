@@ -4,11 +4,20 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"resocks5/internal/consts"
 	"resocks5/internal/state"
 	"sync"
 	"time"
+)
+
+const (
+	relayIdleTimeout      = 5 * time.Minute
+	relayWriteTimeout     = 30 * time.Second
+	connectRetryCount     = 3
+	connectRetryBaseDelay = 300 * time.Millisecond
+	acceptErrorBackoff    = 100 * time.Millisecond
 )
 
 type writerOnly struct {
@@ -97,6 +106,8 @@ func (s *Server) acceptLoop() {
 			case <-s.ctx.Done():
 				return
 			default:
+				log.Printf("[proxy] accept error: %v", err)
+				time.Sleep(acceptErrorBackoff)
 				continue
 			}
 		}
@@ -106,6 +117,11 @@ func (s *Server) acceptLoop() {
 }
 
 func (s *Server) handleConnection(clientConn net.Conn) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[proxy] panic in handler: %v", r)
+		}
+	}()
 	defer clientConn.Close()
 
 	if err := s.handleSOCKS5(clientConn); err != nil {
@@ -230,6 +246,28 @@ func (s *Server) handleSOCKS5(clientConn net.Conn) error {
 }
 
 func (s *Server) connectToRemote(targetAddr string) (net.Conn, error) {
+	var lastErr error
+	for attempt := 0; attempt < connectRetryCount; attempt++ {
+		if attempt > 0 {
+			delay := connectRetryBaseDelay * time.Duration(1<<uint(attempt-1))
+			select {
+			case <-s.ctx.Done():
+				return nil, s.ctx.Err()
+			case <-time.After(delay):
+			}
+		}
+
+		conn, err := s.dialRemote(targetAddr)
+		if err == nil {
+			return conn, nil
+		}
+		lastErr = err
+		log.Printf("[proxy] connect attempt %d/%d to %s failed: %v", attempt+1, connectRetryCount, targetAddr, err)
+	}
+	return nil, lastErr
+}
+
+func (s *Server) dialRemote(targetAddr string) (net.Conn, error) {
 	remoteProxyAddr := net.JoinHostPort(s.settings.ServerAddress, fmt.Sprintf("%d", s.settings.ServerPort))
 
 	dialer := &net.Dialer{
@@ -384,10 +422,26 @@ func (s *Server) connectThroughRemote(conn net.Conn, targetAddr string) error {
 func (s *Server) relay(dst net.Conn, src net.Conn) error {
 	bufp := bufferPool.Get().(*[]byte)
 	defer bufferPool.Put(bufp)
+	buf := *bufp
 
-	_, err := io.CopyBuffer(writerOnly{dst}, src, *bufp)
-	if err == io.EOF {
-		return nil
+	for {
+		src.SetReadDeadline(time.Now().Add(relayIdleTimeout))
+		nr, readErr := src.Read(buf)
+		if nr > 0 {
+			dst.SetWriteDeadline(time.Now().Add(relayWriteTimeout))
+			nw, writeErr := dst.Write(buf[:nr])
+			if writeErr != nil {
+				return writeErr
+			}
+			if nw != nr {
+				return io.ErrShortWrite
+			}
+		}
+		if readErr != nil {
+			if readErr == io.EOF {
+				return nil
+			}
+			return readErr
+		}
 	}
-	return err
 }
