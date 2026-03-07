@@ -1,3 +1,10 @@
+## [1.0.3](https://github.com/d0kur0/resocks5/compare/v1.0.2...v1.0.3) (2026-03-07)
+
+
+### Bug Fixes
+
+* Idle timeout на relay, Retry, Backoff, Panic recovery в handleConnection ([7014220](https://github.com/d0kur0/resocks5/commit/70142203b77b023d0b1a589c01744af46c617ce7))
+
 ## [1.0.2](https://github.com/d0kur0/resocks5/compare/v1.0.1...v1.0.2) (2026-02-12)
 
 
